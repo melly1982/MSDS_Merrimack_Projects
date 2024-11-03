@@ -1,0 +1,250 @@
+---
+title: "Salaries Projection"
+author: "Melissa Nooney"
+date: "2024-07-24"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tinytex)
+library(tidyverse)
+library(ggplot2)
+library(stringr)
+library(dplyr)
+#loading all libraries I intend to use
+```
+
+```{r} 
+#file.choose()
+salary_data <- read.csv("C:\\Users\\mnoon\\OneDrive\\Desktop\\R and Python Programming\\R project\\r project data.csv")
+#bringing data frame into my environment
+```
+
+# General data wrangling and initial analysis
+```{r}
+US_based_salaries <- filter(salary_data, company_location == "US")
+
+International_Salaries <- filter(salary_data, company_location != "US")
+
+# Since the company is, I'm assuming US based, I want to look at just US based 
+#salaries. SO I am filtering in just what I need, but I want to keep the 
+#international just for fun. Filtering in this way will make my future 
+#wrangling a little easier..hopefully.
+#The hire can work offshore, but the company is interested in US rates.
+```
+
+```{r}
+summary(US_based_salaries$salary_in_usd)
+summary(International_Salaries$salary_in_usd)
+which(US_based_salaries$salary_in_usd == 5679) 
+which(International_Salaries$salary_in_usd == 260000)
+# the which function came in handy because there were a few weird numbers 
+#that popped up, and helped in rectify my code, and/or told a deeper story of 
+#where and why for particular salary.
+#want to get an overall picture here of average salaries from 2020-2022. 
+#As I get further into data, I think I will focus on just 2022, so that I can 
+#project inflation based on most current salaries.
+mean(US_based_salaries$salary_in_usd, trim = .10) 
+mean(International_Salaries$salary_in_usd, trim = .10) 
+#trimmed to account for potential outliers, brings closer to median actually,
+#which is more robust statistic. 
+```
+
+```{r}
+US_company_size <- aggregate(US_based_salaries$salary_in_usd, list(US_based_salaries$company_size), summary) %>% 
+  arrange(factor(Group.1, levels = c('S', 'M', 'L')))
+US_company_size
+  
+US_experience <- aggregate(US_based_salaries$salary_in_usd, list(US_based_salaries$experience_level), summary) %>% 
+  arrange(factor(Group.1, levels = c('EN', 'MI', 'SE', 'EX')))
+US_experience
+
+US_yearly <- aggregate(US_based_salaries$salary_in_usd, list(US_based_salaries$work_year), summary) %>% 
+  arrange(factor(Group.1, levels = c('2020', '2021', '2022')))
+
+US_yearly
+
+
+#to show all years but with relation to company size and experience level.
+#organizing data here, so I can get a broad overlook of data using specific 
+#variables
+```
+
+```{r}
+size_exp_us <- US_based_salaries %>% 
+  group_by(company_size, experience_level) %>% 
+  summarize_at("salary_in_usd", list(mean = mean, 
+                                     median = median,
+                                     max = max)) %>% 
+  arrange(factor(experience_level, levels = c('EN', 'MI', 'SE', 'EX'))) %>% 
+  arrange(factor(company_size, levels = c('S', 'M', 'L')))
+
+
+size_exp_us
+#organizing data in order S-L , and Entry-Exec. I guess I don't really need to 
+#do this, but I personally prefer to look at the data in this order.
+
+all_factors <-US_based_salaries %>% 
+  group_by(company_size, experience_level, work_year) %>% 
+  summarize_at("salary_in_usd", list(mean = mean, 
+                                     median = median,
+                                     max = max)) %>% 
+  arrange(factor(experience_level, levels = c('EN', 'MI', 'SE', 'EX'))) %>% 
+  arrange(factor(company_size, levels = c('S', 'M', 'L'))) %>% 
+  arrange(factor(work_year, levels = c('2020', '2021', '2022')))
+
+#this way of organizing let me some interesting information. This could help 
+#in further analysis.Some years only large or medium companies had executive 
+#level, not sure if that will play out somewhere further, but interesting 
+#to keep in mind. 
+```
+
+```{r}
+ex_size_plot <- ggplot(size_exp_us,
+       mapping = aes( x= experience_level, y = median, fill = company_size)
+       ) + geom_bar(stat = 'identity', position = 'dodge') 
+ex_size_plot + scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+
+facet_ex_size_plot <- ggplot(all_factors,
+       mapping = aes( x= experience_level, y = median, fill = company_size)
+       ) + geom_bar(stat = 'identity', position = 'dodge') +
+        facet_wrap(~work_year)
+facet_ex_size_plot + scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+#general overview plots to visualize median salaries across all factors
+```
+
+# More Focused Analysis 
+```{r}
+#This area is to breakdown 2022 rates so that I can later make my projections 
+#based on inflation and cost of living
+
+US_based_2022 <- filter(salary_data, work_year == "2022")
+
+ US_based_2022 %>% 
+  mutate(experience_level  = as.factor(experience_level)) %>% 
+  ggplot(mapping = aes(x= experience_level, y = salary_in_usd, colour = company_size)
+         ) +
+  geom_boxplot(outlier.shape = 19 , varwidth = F) +
+  geom_jitter( position = position_jitterdodge(0.2), size = 0.75) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+#using this plot to visualize the majority of salaries in a given area. 
+ #Mid and Senior at Medium companies, with entry level following, and executive 
+ #level seems to be "rare". 
+
+summary_2022 <- aggregate(US_based_2022$salary_in_usd, list(US_based_2022$experience_level, US_based_2022$company_size), summary) %>% 
+  arrange(factor(Group.2, levels = c('S', 'M', 'L'))) %>% 
+  arrange(factor(Group.1, levels = c('EN', 'MI', 'SE', 'EX')))
+summary_2022 #wanted to see summary based on company size and experience 
+#levels, to give a better representation of wage ranges, this df is listing the 
+#wage ranges visualized on the box plot "boxplot_overall"
+
+medians_2022 <- US_based_2022 %>% 
+  group_by(company_size, experience_level) %>% 
+  summarize_at("salary_in_usd", list(mean = mean, 
+                                     median = median,
+                                     max = max)) %>% 
+  arrange(factor(company_size, levels = c('S', 'M', 'L'))) %>% 
+  arrange(factor(experience_level, levels = c('EN', 'MI', 'SE', 'EX')))
+
+size_2022 <- aggregate(US_based_2022$salary_in_usd, list(US_based_2022$company_size), summary) 
+size_2022 
+
+summary_2022 <- aggregate(US_based_2022$salary_in_usd, list(US_based_2022$experience_level, US_based_2022$company_size), summary) %>% 
+  arrange(factor(Group.2, levels = c('S', 'M', 'L'))) %>% 
+  arrange(factor(Group.1, levels = c('EN', 'MI', 'SE', 'EX')))
+summary_2022 #wanted to see summary based on company size and experience levels,
+#to give a better representation of wage ranges
+
+```
+
+#Inflation and COLA Adjustments
+```{r}
+select_inflation <- select(summary_2022, -(3))
+trial <-summary_2022[, sapply(summary_2022, is.numeric)] <- summary_2022[, sapply(summary_2022, is.numeric)] 
+select_inflation_2 <-bind_cols(select_inflation, trial)
+select_inflation_2[3:8] = lapply(select_inflation_2[3:8], "*", 1.152)
+ #so here we have multiplied all columns by the adjusted rate of 15.2%
+
+#size_inflation <- select(size_2022, -(2))
+#trial_2 <-size_2022[, sapply(size_2022, is.numeric)] <- size_2022[, sapply(size_2022, is.numeric)] 
+#size_inflation_2 <-bind_cols(size_inflation, trial_2)
+#size_inflation_2[2:7] = lapply(size_inflation_2[2:7], "*", 1.152)
+```
+
+
+
+
+
+
+
+#Building Team for growth. Who is the team at medium companies?
+```{r}
+#Since our CEO wants to grow from small to medium, what roles are those 
+#companies comprised off? What will be competitive salaries for a team of 
+#data scientists? 
+length(unique(US_based_2022$job_title))#33 unique job titles
+table(US_based_2022$job_title) # I want to know the most popular job titles, 
+#so I can build a team and know proper wages
+#Top 5 are Data Engineer, Data Scientist, Data Analyst, Machine Learning 
+#Engineer, Data Architect
+
+US_based_2022$job_title=factor(US_based_2022$job_title)
+
+medians_by_title <- by(US_based_2022$salary_in_usd,US_based_2022$job_title,median)
+medians_by_title # I know my top 5 so I can reference this list to find my 
+#median values, then I can use my dataframe "sum-by_title_2022' to reference
+#the wages by company size. 
+
+sum_by_title_2022 <- US_based_2022 %>% 
+  group_by(company_size, job_title) %>% 
+  summarize_at("salary_in_usd", list(mean = mean, 
+                                     median = median,
+                                     max = max,
+                                     sd = sd
+                                     )) %>% 
+  arrange(factor(company_size, levels = c('S', 'M', 'L'))) 
+
+#accounting for inflation and cost of living code below
+
+job_summary <- aggregate(US_based_2022$salary_in_usd, list(US_based_2022$experience_level, US_based_2022$company_size, US_based_2022$job_title), summary)%>% 
+  arrange(factor(Group.2, levels = c('S', 'M', 'L'))) %>% 
+  arrange(factor(Group.1, levels = c('EN', 'MI', 'SE', 'EX'))) %>% 
+  arrange(factor(Group.3, levels = c('Data Engineer', 'Data Scientist', 'Data Analyst', 'Machine Learning Engineer', 'Data Architect')))
+
+
+select_job_inflation <- select(job_summary, -(4))
+test <-job_summary[, sapply(job_summary, is.numeric)] <- job_summary[, sapply(job_summary, is.numeric)] 
+job_inflation_2 <-bind_cols(select_job_inflation, test)
+job_inflation_2[4:9] = lapply(job_inflation_2[4:9], "*", 1.152)
+#so we have created summaries by job title, and then applied the inflation 
+#parameter for the values. 
+#The summary columns were not recognized as numeric, so i had to separate 
+#and combine so that I could apply the 1.152 rate
+
+
+#some of these data frames I created I ended up not using, which I assume is 
+#part of the process. Not sure I needed to create so many, as it did cause 
+#some confusion, and a few times I re-used a dataframe or variable name and 
+#really threw off my previous data, causing me to have to re-do some dataframes. 
+```
+
+#In Summary
+```{r}
+#In summery, my goal was to take all the data and evaluate from a company 
+#size perspective, an experience level perspective, and job title perspective. 
+#Ultimately, I wanted to answer the basic question of what a competitive salary
+#is with inflation based on current company needs, but I wanted to give a back story on what those numbers were based on.
+#In terms of growth, I wanted to address what that data would look like going 
+#from a small to medium company, as well as, what roles are most prevalent 
+#in those sized companies. 
+#I primarily used median, as it is more accurate in mitigating outliers. 
+#I did also provide quartile ranges.
+```
+
